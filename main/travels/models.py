@@ -18,13 +18,25 @@ class ProjectPlace(models.Model):
     title = models.CharField(max_length=255, blank=True)  # тягнемо з API
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def clean(self):
+        # Validate that the place exists in Art Institute API
+        r = requests.get(
+            'https://api.artic.edu/api/v1/artworks',
+            params={'ids': self.external_id},
+            timeout=5,
+        )
+        data = r.json().get('data', [])
+
+        if not data:
+            raise ValidationError(
+                {'external_id': 'Place with this external_id was not found in Art Institute API'}
+            )
+
+        # Fill title from API
+        self.title = data[0].get('title', '')
+
     def save(self, *args, **kwargs):
-        # якщо title порожній, тягнемо з API
-        if not self.title:
-            r = requests.get(f'https://api.artic.edu/api/v1/artworks', params={'ids': self.external_id})
-            data = r.json().get('data', [])
-            if data:
-                self.title = data[0].get('title', '')
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):

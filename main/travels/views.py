@@ -1,8 +1,8 @@
+from django.core.exceptions import ValidationError
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .models import TravelProject, ProjectPlace, ProjectPlaceAssignment
-from .serializers import TravelProjectSerializer, ProjectPlaceAssignmentSerializer, ProjectPlaceSerializer
-import requests
+from .serializers import TravelProjectSerializer, ProjectPlaceAssignmentSerializer
 
 
 class TravelProjectViewSet(viewsets.ModelViewSet):
@@ -36,40 +36,6 @@ class TravelProjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         return super().destroy(request, *args, **kwargs)
-
-
-class ProjectPlaceViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing standalone places.
-    Supports validation of external_id via Art Institute of Chicago API.
-    """
-    queryset = ProjectPlace.objects.all()
-    serializer_class = ProjectPlaceSerializer
-
-    def create(self, request, *args, **kwargs):
-        external_id = request.data.get('external_id')
-
-        if not external_id:
-            return Response({"error": "external_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Validate that the place exists via Art Institute API
-        r = requests.get(
-            "https://api.artic.edu/api/v1/artworks",
-            params={"ids": external_id}
-        )
-        data = r.json().get("data", [])
-
-        if not data:
-            return Response(
-                {"error": f"Place with id {external_id} not found in Art Institute API"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Optionally populate the title from API
-        title = data[0].get("title", "")
-        request.data["title"] = title
-
-        return super().create(request, *args, **kwargs)
 
 
 class ProjectPlaceAssignmentViewSet(viewsets.ViewSet):
@@ -123,8 +89,12 @@ class ProjectPlaceAssignmentViewSet(viewsets.ViewSet):
                 {"error": "A project cannot have more than 10 places"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        place, _ = ProjectPlace.objects.get_or_create(external_id=external_id)
+        try:
+            place, _ = ProjectPlace.objects.get_or_create(
+                external_id=external_id
+            )
+        except ValidationError as e:
+            return Response(e.message_dict, status=status.HTTP_400_BAD_REQUEST)
 
         # Prevent duplicate place in the same project
         if ProjectPlaceAssignment.objects.filter(
@@ -161,7 +131,7 @@ class ProjectPlaceAssignmentViewSet(viewsets.ViewSet):
         serializer = ProjectPlaceAssignmentSerializer(
             assignment,
             data=request.data,
-            partial=True  # allow PATCH
+            partial=True
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()

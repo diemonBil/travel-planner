@@ -2,14 +2,7 @@ from rest_framework import serializers
 from .models import TravelProject, ProjectPlace, ProjectPlaceAssignment
 
 
-class ProjectPlaceSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = ProjectPlace
-        fields = ['id', 'external_id', 'title']
-
-
-# Серіалізатор для місця в контексті проєкту
+# Serializer for M2M place in project context
 class ProjectPlaceAssignmentSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
     external_id = serializers.IntegerField(source='place.external_id', read_only=True)
